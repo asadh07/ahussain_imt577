@@ -1,0 +1,296 @@
+USE DATABASE IMT577_DW_ASAD_HUSSAIN_M5
+
+//PASS THROUGH VIEWS//
+
+create or replace view "PTProduct" as
+select dimproductid
+      ,productid 
+      ,producttypeid
+      ,productcategoryid
+      ,productname 
+      ,producttype 
+      ,productcategory
+      ,productretailprice
+      ,productwholesaleprice
+      ,productcost 
+      ,productretailprofit
+      ,productwholesaleunitprofit
+      ,productprofitmarginunitpercent
+ from dim_product
+
+
+create or replace view "PTStore" as
+select dimstoreid
+      ,dimlocationid 
+      ,sourcestoreid 
+      ,storename 
+      ,storenumber
+      ,storemanager 
+from dim_store
+;
+
+create or replace view "PTReseller" as
+select dimresellerid 
+      ,dimlocationid 
+      ,resellerid 
+      ,resellername
+      ,contactname 
+      ,phonenumber
+      ,email 
+from dim_reseller
+;
+
+create or replace view "PTCustomer" as
+select dimcustomerid
+      ,dimlocationid 
+      ,customerid 
+      ,customerfullname
+      ,customerfirstname
+      ,customerlastname 
+      ,customergender 
+from dim_customer
+;
+
+create or replace view "PTChannel" as
+select dimchannelid 
+      ,channelid 
+      ,channelname 
+      ,channelcategory
+from dim_channel
+;
+
+create or replace view "PTLocation" as
+select dimlocationid
+      ,locationid 
+      ,address 
+      ,city 
+      ,postalcode
+      ,state_province
+      ,country 
+from dim_location
+;
+
+create or replace view "PTDate" as
+select DATE_PKEY,
+		DATE,
+        FULL_DATE_DESC,
+		DAY_NUM_IN_WEEK,
+		DAY_NUM_IN_MONTH,
+		DAY_NUM_IN_YEAR,
+		DAY_NAME,
+		DAY_ABBREV,
+		WEEKDAY_IND,
+		US_HOLIDAY_IND,
+        uw_HOLIDAY_IND,
+		MONTH_END_IND,
+		WEEK_BEGIN_DATE_NKEY,
+		WEEK_BEGIN_DATE,
+		WEEK_END_DATE_NKEY,
+		WEEK_END_DATE,
+		WEEK_NUM_IN_YEAR,
+		MONTH_NAME,
+		MONTH_ABBREV,
+		MONTH_NUM_IN_YEAR,
+		YEARMONTH,
+		CURRENT_QUARTER,
+		YEARQUARTER,
+		CURRENT_YEAR,
+		FISCAL_WEEK_NUM,
+		FISCAL_MONTH_NUM,
+		FISCAL_YEARMONTH,
+		FISCAL_QUARTER,
+		FISCAL_YEARQUARTER,
+		FISCAL_HALFYEAR,
+		FISCAL_YEAR,
+		SQL_TIMESTAMP,
+		CURRENT_ROW_IND,
+		EFFECTIVE_DATE,
+		EXPIRA_DATE	
+from dim_date
+;
+
+create or replace view "PTSA" as
+select dimproductid 
+    ,dimstoreid 
+    ,dimresellerid
+    ,dimcustomerid
+    ,dimchannelid 
+    ,dimsaledateid
+    ,dimlocationid
+    ,salesheaderid
+    ,salesdetailid
+    ,saleamount 
+    ,salequantity
+    ,saleunitprice
+    ,saleextendedprice
+    ,saletotalprofit 
+from fact_salesactual
+;
+
+create or replace view "PTSRC" as
+select dimstoreid
+    ,dimresellerid
+    ,dimchannelid 
+    ,dimtargetdateid
+    ,salestargetamount
+from fact_srcsalestarget
+;
+
+create or replace view "PTPST" as
+select dimproductid 
+    ,dimtargetdateid 
+    ,producttargetsalesquantity
+from fact_productsalestarget
+
+------------------------------------------ //VIEWS// ------------------------------------------
+
+CREATE OR REPLACE SECURE VIEW "Annual Store Targets" as
+    SELECT d.year as targetyear,
+           s.storename as storename,
+           sum(src.salestargetamount) as salestargetamount
+           from fact_srcsalestarget src 
+           join dim_store s on src.dimstoreid = s.dimstoreid
+           join dim_date d on src.dimtargetdateid = d.date_pkey
+           where s.storename in ('Store Number 10', 'Store Number 21')
+           group by D.YEAR, s.storename
+           order by d.year, s.storename;
+    
+SELECT * FROM "Annual Store Targets"
+------------------------------------------
+
+CREATE OR REPLACE SECURE VIEW "Annual Store Performance" as
+    SELECT d.year as targetyear,
+           s.storename as storename,
+           sum(sa.saleamount) as salesamount,
+           sum(sa.salequantity) as totalquantity,
+           sum(sa.saletotalprofit) as totalprofit,
+           sum(sa.saleextendedprice) as totalcost
+    FROM Fact_salesactual sa 
+          join dim_store s on sa.dimstoreid = s.dimstoreid
+          join fact_srcsalestarget src on s.dimstoreid = src.dimstoreid
+          join dim_date d on src.dimtargetdateid = d.date_pkey
+          where s.storename in ('Store Number 10', 'Store Number 21')
+          group by D.YEAR, s.storename
+          order by d.year, s.storename;
+          
+SELECT * FROM "Annual Store Performance"        
+                 
+------------------------------------------
+
+CREATE OR REPLACE VIEW "ProductSales" as
+    with TopProducts as (
+       select productname,
+          productprofitmarginunitpercent
+        from dim_product
+        order by productprofitmarginunitpercent desc
+        limit 5)
+       select d.year as year,
+          s.storename,
+          p.productname,
+          count(p.productname) as quantity,
+          p.productretailprofit,
+          p.productwholesaleunitprofit,
+          p.productprofitmarginunitpercent,
+          case when tp.productprofitmarginunitpercent is not null then true end as top5
+        from fact_salesactual sa
+          join dim_store s on sa.dimstoreid = s.dimstoreid
+          join dim_product p on sa.dimproductid = p.productid
+          join dim_date d on sa.dimsaledateid = d.date_pkey
+          left join TopProducts tp on tp.productname = tp.productname
+        where s.storenumber = 10 or 21
+        group by year(d.date), s.storename, p.productname, p.productretailprofit, p.productwholesaleunitprofit, p.productprofitmarginunitpercent, top5
+        order by quantity desc;
+
+select * from "ProductSales"      
+
+------------------------------------------
+
+CREATE OR REPLACE VIEW "Product Performance by Day" as
+    SELECT s.storename as storename,
+           p.productname as productname,
+           p.producttype as producttype,
+           d.day_name as dayname,
+           count(p.productname) as quantity,
+           p.productretailprofit as productretailprofit,
+           p.productwholesaleunitprofit as productwholesaleunitprofit,
+           p.productprofitmarginunitpercent as productprofitmarginunitpercent,
+           sum (fsa.saleamount) as totalsales,
+           sum (fsa.salequantity) as totalquantitysold,
+           sum (fsa.saletotalprofit) as totalprofit
+    FROM fact_salesactual fsa 
+        JOIN dim_store s on fsa.dimstoreid = s.dimstoreid
+        JOIN dim_date d on fsa.dimsaledateid = d.date_pkey
+        JOIN dim_product p on fsa.dimproductid = p.dimproductid
+        where s.storename in ('Store Number 10', 'Store Number 21')
+        group by storename, productname, producttype, dayname, productretailprofit, productwholesaleunitprofit, productprofitmarginunitpercent
+
+select * from "Product Performance by Day" 
+
+------------------------------------------
+
+CREATE OR REPLACE VIEW  "Annual Sales to Target" as
+  with sales as (
+     SELECT d.year as targetyear,
+           s.storename as storename,
+           sum(sa.saleamount) as salesamount,
+           sum(sa.salequantity) as totalquantity,
+           sum(sa.saletotalprofit) as totalprofit,
+           sum(sa.saleextendedprice) as totalcost
+    FROM Fact_salesactual sa 
+          join dim_store s on sa.dimstoreid = s.dimstoreid
+          join fact_srcsalestarget src on s.dimstoreid = src.dimstoreid
+          join dim_date d on src.dimtargetdateid = d.date_pkey
+          where s.storename in ('Store Number 10', 'Store Number 21')
+          group by D.YEAR, s.storename),
+    target as (
+        SELECT d.year as targetyear,
+           s.storename as storename,
+           sum(src.salestargetamount) as salestargetamount
+           from fact_srcsalestarget src 
+           join dim_store s on src.dimstoreid = s.dimstoreid
+           join dim_date d on src.dimtargetdateid = d.date_pkey
+           where s.storename in ('Store Number 10', 'Store Number 21')
+           group by D.YEAR, s.storename)
+    select s.targetyear, s.storename, s.salesamount, s.totalquantity, s.totalprofit, s.totalcost, t.salestargetamount, s.salesamount / t.salestargetamount as pct
+        from sales s 
+        join target t on s.targetyear = t.targetyear
+            and s.storename = t.storename
+        order by s.targetyear, s.storename
+         
+SELECT * FROM "Annual Sales to Target"      
+                    
+------------------------------------------
+
+CREATE OR REPLACE VIEW  "Store Performance by Product Type" as
+    SELECT d.year as year,
+           s.storename as storename,
+           p.producttype as producttype,
+           count (p.producttype) as salequantity
+    from fact_salesactual sa
+        join dim_store s on sa.dimstoreid = s.dimstoreid
+        join dim_date d on sa.dimsaledateid = d.date_pkey
+        join dim_product p on sa.dimproductid = p.productid
+        where s.storename in ('Store Number 10', 'Store Number 21')
+    group by d.year, s.storename, p.producttype
+    order by salequantity desc
+    
+SELECT * FROM "Store Performance by Product Type"      
+
+------------------------------------------
+
+CREATE OR REPLACE VIEW  "Bonus Recommendation" as
+    SELECT
+        d.year as year,
+        s.storename as storename,
+        sum(sa.saleamount) as salesamount,
+        sum (sa.saletotalprofit) as totalprofit,
+        sum (src.salestargetamount) as targetsales,
+        sum (sa.saleamount) / sum (src.salestargetamount) as salestotarget
+    from fact_salesactual sa
+        join FACT_SRCSALESTARGET src on sa.dimstoreid = src.dimstoreid
+        join dim_date d on sa.dimsaledateid = d.date_pkey
+        join dim_store s on sa.dimstoreid = s.dimstoreid
+        where s.storename in ('Store Number 10', 'Store Number 21')
+    group by d.year, s.storename, sa.saleamount, sa.saletotalprofit, src.salestargetamount        
+        
+SELECT * FROM "Bonus Recommendation"    
